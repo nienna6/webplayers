@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Xtream & M3U Pro Player</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+:root{--red:#E50914;--bg:#080808;--bg2:#121212;--bg3:#1e1e1e;--border:#2a2a2a;--text:#fff;--text2:#aaa;--font:'Outfit',sans-serif}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;height:100vh}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--bg)}
+.screen.active{display:flex}
+
+/* HEADER Y BUSCADOR */
+.hdr{padding:15px;display:flex;justify-content:space-between;align-items:center;background:var(--bg2);border-bottom:1px solid var(--border);z-index:10;gap:10px}
+.logo{font-size:18px;font-weight:900;color:var(--red);white-space:nowrap}
+.search-box{flex:1;position:relative;display:none}
+#main.active .search-box{display:block}
+.search-box input{width:100%;background:var(--bg3);border:1px solid var(--border);color:#fff;padding:8px 12px 8px 35px;border-radius:8px;font-size:14px;outline:none}
+.search-box::before{content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:0.5}
+
+.btn-add{background:var(--red);border:none;color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer}
+.scroll-v{flex:1;overflow-y:auto;padding:15px}
+
+/* CARDS */
+.l-card{background:var(--bg3);padding:15px;border-radius:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);cursor:pointer}
+
+/* MODAL */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+#modal.active{display:flex}
+.m-box{background:var(--bg2);width:100%;max-width:400px;border-radius:20px;padding:25px;border:1px solid var(--border)}
+.m-tabs{display:flex;gap:10px;margin-bottom:20px}
+.m-tabs button{flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:8px;cursor:pointer;font-size:12px}
+.m-tabs button.on{background:var(--red);color:#fff;border-color:var(--red)}
+.fi{width:100%;background:var(--bg3);border:1px solid var(--border);color:#fff;padding:12px;border-radius:10px;margin-bottom:10px;outline:none}
+
+/* CATEGORIAS */
+.cats-bar{display:flex;gap:8px;padding:12px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;background:var(--bg);cursor:grab;user-select:none}
+.cats-bar:active{cursor:grabbing}
+.cats-bar::-webkit-scrollbar{display:none}
+.chip{display:inline-block;padding:8px 16px;background:var(--bg3);border-radius:20px;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;border:1px solid var(--border);flex-shrink:0}
+.chip.on{background:var(--red);color:#fff;border-color:var(--red)}
+
+/* GRID Y LISTAS */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:12px}
+.item-v{text-align:center;cursor:pointer}
+.item-v img{width:100%;aspect-ratio:2/3;border-radius:10px;object-fit:cover;background:var(--bg3);border:1px solid var(--border)}
+.item-v div{font-size:11px;margin-top:5px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.list-i{display:flex;align-items:center;gap:12px;background:var(--bg3);padding:10px;border-radius:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer}
+.list-i img{width:45px;height:45px;border-radius:8px;object-fit:cover}
+
+/* NAV */
+.nav{height:70px;background:var(--bg2);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.n-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text2);gap:4px;cursor:pointer}
+.n-btn.on{color:var(--red)}
+
+/* PLAYER */
+#player{background:#000;z-index:2000}
+video{width:100%;height:100%}
+#sdScreen{z-index:500;background:var(--bg)}
+.season-title{color:var(--red);font-size:18px;font-weight:900;margin:20px 0 10px;padding-left:5px}
+</style>
+</head>
+<body>
+
+<div id="home" class="screen active">
+    <div class="hdr"><span class="logo">XTREAM & M3U</span><button class="btn-add" onclick="toggleM(true)">+ Agregar</button></div>
+    <div class="scroll-v" id="savedLists"></div>
+</div>
+
+<div id="modal">
+    <div class="m-box">
+        <div class="m-tabs">
+            <button id="t-xt" class="on" onclick="setMode('xt')">XTREAM CODES</button>
+            <button id="t-m3u" onclick="setMode('m3u')">LISTA M3U</button>
+        </div>
+        <input class="fi" id="ln" placeholder="Nombre de la lista"/>
+        <div id="f-xt">
+            <input class="fi" id="lu" placeholder="http://servidor.com:8080"/>
+            <input class="fi" id="luser" placeholder="Usuario"/>
+            <input class="fi" id="lpass" type="password" placeholder="Contraseña"/>
+        </div>
+        <div id="f-m3u" style="display:none">
+            <input class="fi" id="lm" placeholder="URL de la lista .m3u"/>
+        </div>
+        <button class="btn-add" style="width:100%;margin-top:10px" onclick="saveList()">GUARDAR E INGRESAR</button>
+        <button onclick="toggleM(false)" style="width:100%;background:none;border:none;color:var(--text2);margin-top:15px;cursor:pointer">Cancelar</button>
+    </div>
+</div>
+
+<div id="main" class="screen">
+    <div class="hdr">
+        <button onclick="exitApp()" style="background:none;border:none;color:#fff;font-size:20px">✕</button>
+        <div class="search-box">
+            <input type="text" id="mainSearch" placeholder="Buscar..." oninput="searchContent()">
+        </div>
+    </div>
+    <div id="catsCont" class="cats-bar"></div>
+    <div class="scroll-v" id="itemsCont"></div>
+    <div class="nav" id="appNav">
+        <div class="n-btn on" onclick="setTab('live', this)"><span>📺</span><small>VIVO</small></div>
+        <div class="n-btn" onclick="setTab('movie', this)"><span>🎬</span><small>CINE</small></div>
+        <div class="n-btn" onclick="setTab('series', this)"><span>🎭</span><small>SERIES</small></div>
+    </div>
+</div>
+
+<div id="sdScreen" class="screen">
+    <div class="hdr"><button onclick="closeSD()" style="background:none;border:none;color:#fff;font-size:20px">← Volver</button><div id="sdName"></div></div>
+    <div class="scroll-v" id="sdBody"></div>
+</div>
+
+<div id="player" class="screen">
+    <div class="hdr" style="position:absolute;top:0;left:0;right:0;background:linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);border:none;">
+        <button onclick="closeP()" style="background:none;border:none;color:#fff;font-size:24px">✕</button>
+        <div id="pTitle"></div>
+    </div>
+    <video id="vid" controls autoplay></video>
+</div>
+
+<script>
+const DB_KEY = 'XTREAM_ULTIMATE_STORAGE';
+let state = { lists: JSON.parse(localStorage.getItem(DB_KEY) || '[]'), cur: null, tab: 'live', data: {}, cats: {}, mode: 'xt' };
+let hls = null;
+
+function toggleM(s){ document.getElementById('modal').classList.toggle('active', s); }
+
+function setMode(m){
+    state.mode = m;
+    document.getElementById('t-xt').className = m === 'xt' ? 'on' : '';
+    document.getElementById('t-m3u').className = m === 'm3u' ? 'on' : '';
+    document.getElementById('f-xt').style.display = m === 'xt' ? 'block' : 'none';
+    document.getElementById('f-m3u').style.display = m === 'm3u' ? 'block' : 'none';
+}
+
+function saveList(){
+    const name = document.getElementById('ln').value || 'Mi Lista';
+    const id = Date.now().toString();
+    let newItem = { id, name, type: state.mode };
+    if(state.mode === 'xt'){
+        newItem.url = document.getElementById('lu').value.replace(/\/$/, "");
+        newItem.user = document.getElementById('luser').value;
+        newItem.pass = document.getElementById('lpass').value;
+        if(!newItem.url || !newItem.user) return alert('Faltan datos');
+    } else {
+        newItem.url = document.getElementById('lm').value;
+        if(!newItem.url) return alert('URL requerida');
+    }
+    state.lists.push(newItem);
+    localStorage.setItem(DB_KEY, JSON.stringify(state.lists));
+    toggleM(false); renderHome(); boot(id);
+}
+
+function renderHome(){
+    const cont = document.getElementById('savedLists');
+    state.lists = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+    if(!state.lists.length) return cont.innerHTML = '<center style="margin-top:50px;color:#555">Sin listas guardadas.</center>';
+    cont.innerHTML = state.lists.map(l => `
+        <div class="l-card" onclick="boot('${l.id}')">
+            <div><div style="font-weight:800">${l.name}</div><div style="font-size:11px;color:#555">${l.type.toUpperCase()}</div></div>
+            <button onclick="event.stopPropagation();delL('${l.id}')" style="background:none;border:none;color:#555;font-size:20px">✕</button>
+        </div>`).join('');
+}
+
+function delL(id){ if(confirm('¿Eliminar?')){ state.lists = state.lists.filter(x=>x.id!==id); localStorage.setItem(DB_KEY, JSON.stringify(state.lists)); renderHome(); } }
+
+async function boot(id){
+    state.cur = state.lists.find(x=>x.id===id);
+    document.getElementById('home').classList.remove('active');
+    document.getElementById('main').classList.add('active');
+    document.getElementById('mainSearch').value = ""; // Limpiar busqueda
+    document.getElementById('appNav').style.display = state.cur.type === 'xt' ? 'flex' : 'none';
+    if(state.cur.type === 'xt') await loadXtream(); else await loadM3U();
+}
+
+async function loadXtream(){
+    const api = (a) => `${state.cur.url}/player_api.php?username=${state.cur.user}&password=${state.cur.pass}&action=${a}`;
+    try {
+        const fj = (a) => fetch(api(a)).then(r=>r.json()).catch(()=>[]);
+        const [cl, cm, cs, dl, dm, ds] = await Promise.all([fj('get_live_categories'), fj('get_vod_categories'), fj('get_series_categories'), fj('get_live_streams'), fj('get_vod_streams'), fj('get_series')]);
+        state.cats = { live: cl, movie: cm, series: cs };
+        state.data = { live: dl, movie: dm, series: ds };
+        setTab('live', document.querySelector('.n-btn'));
+    } catch(e) { alert("Error conexión"); exitApp(); }
+}
+
+async function loadM3U(){
+    try {
+        const res = await fetch(state.cur.url).then(r=>r.text());
+        const lines = res.split('\n');
+        let items = [];
+        for(let i=0; i<lines.length; i++){
+            if(lines[i].startsWith('#EXTINF')){
+                const info = lines[i]; const url = lines[i+1]?.trim();
+                const name = info.split(',').pop();
+                const icon = info.match(/tvg-logo="(.*?)"/)?.[1] || "";
+                if(url) items.push({ name, stream_id: url, stream_icon: icon, category_id: "0", isDirect: true });
+            }
+        }
+        state.data.live = items; state.cats.live = [{category_id: "0", category_name: "General"}];
+        setTab('live', document.querySelector('.n-btn'));
+    } catch(e) { alert("Error M3U"); exitApp(); }
+}
+
+function setTab(t, btn){
+    state.tab = t;
+    document.querySelectorAll('.n-btn').forEach(x=>x.classList.remove('on'));
+    if(btn) btn.classList.add('on');
+    const cats = state.cats[t] || [];
+    document.getElementById('catsCont').innerHTML = `<div class="chip on" onclick="filterCat('all', this)">Todo</div>` + 
+        cats.map(c => `<div class="chip" onclick="filterCat('${c.category_id}', this)">${c.category_name}</div>`).join('');
+    renderItems(state.data[t] || []);
+}
+
+function filterCat(id, btn){
+    document.querySelectorAll('.chip').forEach(x=>x.classList.remove('on')); btn.classList.add('on');
+    document.getElementById('mainSearch').value = ""; // Limpiar búsqueda al cambiar categoría
+    const filtered = id === 'all' ? state.data[state.tab] : state.data[state.tab].filter(x => x.category_id == id);
+    renderItems(filtered);
+}
+
+function searchContent(){
+    const query = document.getElementById('mainSearch').value.toLowerCase();
+    // Buscamos en toda la data de la sección actual (VIVO, CINE o SERIES)
+    const filtered = state.data[state.tab].filter(item => item.name.toLowerCase().includes(query));
+    renderItems(filtered);
+}
+
+function renderItems(arr){
+    const cont = document.getElementById('itemsCont');
+    if(state.tab === 'live'){
+        cont.innerHTML = arr.slice(0,500).map(i => `
+            <div class="list-i" onclick="play('${i.stream_id}', '${i.name}', '${i.isDirect}')">
+                <img src="${i.stream_icon}" onerror="this.src='https://via.placeholder.com/50?text=TV'">
+                <div style="font-weight:600">${i.name}</div>
+            </div>`).join('');
+    } else {
+        const action = state.tab === 'series' ? 'openSD' : 'play';
+        cont.innerHTML = `<div class="grid">` + arr.slice(0,500).map(i => `
+            <div class="item-v" onclick="${action}('${i.stream_id || i.series_id}', '${i.name}')">
+                <img src="${i.stream_icon || i.cover}" onerror="this.src='https://via.placeholder.com/100x150?text=VOD'">
+                <div>${i.name}</div>
+            </div>`).join('') + `</div>`;
+    }
+}
+
+async function openSD(id, name){
+    const sd = document.getElementById('sdScreen'); sd.classList.add('active');
+    document.getElementById('sdName').textContent = name;
+    const body = document.getElementById('sdBody'); body.innerHTML = 'Cargando...';
+    try {
+        const res = await fetch(`${state.cur.url}/player_api.php?username=${state.cur.user}&password=${state.cur.pass}&action=get_series_info&series_id=${id}`).then(r=>r.json());
+        const eps = res.episodes; let html = '';
+        for(let s in eps){
+            html += `<div class="season-title">Temporada ${s}</div>`;
+            eps[s].forEach(e => { html += `<div class="list-i" onclick="play('${e.id}', '${e.title}', false, '${e.container_extension}')"><div style="width:30px;font-weight:900;color:var(--red)">${e.episode_num}</div><div style="flex:1">${e.title}</div><div style="font-size:18px">▶</div></div>`; });
+        }
+        body.innerHTML = html;
+    } catch(e){ body.innerHTML = 'Error.'; }
+}
+
+function play(id, name, isDirect, ext){
+    document.getElementById('player').classList.add('active');
+    document.getElementById('pTitle').textContent = name;
+    const v = document.getElementById('vid');
+    let url = isDirect === "true" ? id : "";
+    if(!url){
+        let type = state.tab === 'live' ? 'live' : 'movie';
+        if(document.getElementById('sdScreen').classList.contains('active')) type = 'series';
+        url = `${state.cur.url}/${type}/${state.cur.user}/${state.cur.pass}/${id}.${state.tab === 'live' ? 'm3u8' : (ext || 'mp4')}`;
+    }
+    if(hls) hls.destroy();
+    if(url.includes('m3u8') && Hls.isSupported()){ hls = new Hls(); hls.loadSource(url); hls.attachMedia(v); hls.on(Hls.Events.MANIFEST_PARSED, () => v.play()); }
+    else { v.src = url; v.play().catch(() => { v.src = url.split('.').slice(0,-1).join('.') + '.ts'; v.play(); }); }
+}
+
+const slider = document.getElementById('catsCont');
+let isDown = false, startX, scrollLeft;
+slider.addEventListener('mousedown', (e) => { isDown = true; startX = e.pageX - slider.offsetLeft; scrollLeft = slider.scrollLeft; });
+slider.addEventListener('mouseleave', () => isDown = false);
+slider.addEventListener('mouseup', () => isDown = false);
+slider.addEventListener('mousemove', (e) => { if(!isDown) return; e.preventDefault(); const walk = (e.pageX - slider.offsetLeft - startX) * 2; slider.scrollLeft = scrollLeft - walk; });
+
+function closeP(){ const v = document.getElementById('vid'); v.pause(); v.src=""; if(hls) hls.destroy(); document.getElementById('player').classList.remove('active'); }
+function closeSD(){ document.getElementById('sdScreen').classList.remove('active'); }
+function exitApp(){ document.getElementById('main').classList.remove('active'); document.getElementById('home').classList.add('active'); }
+window.onload = renderHome;
+</script>
+</body>
+</html>
